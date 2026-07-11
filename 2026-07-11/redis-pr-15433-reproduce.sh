@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 复现脚本: Redis BITFIELD 有符号整数溢出漏洞
-# 来源: redis/redis@c5ac9714
-# 漏洞类型: 有符号整数溢出 (CVE-待分配)
+# 来源: redis/redis PR #15433 (Issue #15389)
+# 漏洞类型: 有符号整数溢出
 # 生成时间: 2026-07-11
 
 set -euo pipefail
@@ -16,10 +16,8 @@ echo -e "${YELLOW}============================================================${
 echo -e "${YELLOW}  Redis BITFIELD #offset 有符号整数溢出漏洞复现${NC}"
 echo -e "${YELLOW}============================================================${NC}"
 echo ""
-echo "来源提交: c5ac9714"
-echo "关联 Issue: #15389"
 echo "关联 PR: #15433"
-echo ""
+echo "关联 Issue: #15389"
 echo "漏洞描述: BITFIELD/BITFIELD_RO 的 #<offset> 语法在处理极大偏移量时，"
 echo "          乘法 loffset * bits 在 long long 上发生有符号整数溢出。"
 echo "          在 UBSAN/加固构建中导致进程崩溃（DoS）。"
@@ -31,7 +29,6 @@ echo -e "${BLUE}[1/5] 检查环境...${NC}"
 REDIS_SERVER=""
 REDIS_CLI=""
 
-# 查找 redis-server 和 redis-cli
 for suffix in "-ubsan" ""; do
     if command -v "redis-server${suffix}" &> /dev/null; then
         REDIS_SERVER="redis-server${suffix}"
@@ -137,16 +134,10 @@ if kill -0 $SERVER_PID 2>/dev/null; then
         echo -e "${GREEN}============================================================${NC}"
     else
         echo -e "${RED}✗ PING 无响应（服务器可能僵死）${NC}"
-        echo ""
-        echo -e "${RED}============================================================${NC}"
-        echo -e "${RED}  服务器无响应，请检查日志${NC}"
-        echo -e "${RED}============================================================${NC}"
     fi
 else
     echo -e "${RED}✗ 服务器进程已终止${NC}"
     echo ""
-    
-    # 检查日志是否有 UBSAN 错误
     if grep -q "runtime error: signed integer overflow" "$LOG"; then
         echo -e "${RED}日志中检测到 UBSAN 溢出错误:${NC}"
         grep "runtime error: signed integer overflow" "$LOG"
@@ -155,14 +146,6 @@ else
         echo -e "${RED}  结论：漏洞复现成功！${NC}"
         echo -e "${RED}  服务器因整数溢出而崩溃（DoS）。${NC}"
         echo -e "${RED}============================================================${NC}"
-    else
-        echo -e "${YELLOW}日志内容（最后 20 行）:${NC}"
-        tail -20 "$LOG"
-        echo ""
-        echo -e "${YELLOW}============================================================${NC}"
-        echo -e "${YELLOW}  服务器已退出，但未在日志中找到预期的 UBSAN 错误。${NC}"
-        echo -e "${YELLOW}  可能使用了未启用 UBSAN 的构建。${NC}"
-        echo -e "${YELLOW}============================================================${NC}"
     fi
 fi
 
@@ -170,7 +153,7 @@ fi
 echo ""
 echo -e "${BLUE}[5/5] 额外边界值测试...${NC}"
 
-# 重启服务器用于边界测试
+# 重启服务器
 $REDIS_CLI -p $PORT SHUTDOWN NOSAVE 2>/dev/null || true
 sleep 1
 pkill -f "redis-server.*--port $PORT" 2>/dev/null || true
@@ -196,5 +179,3 @@ $REDIS_CLI -p $PORT BITFIELD k GET i8 '#0' 2>&1 || true
 
 echo ""
 echo -e "${GREEN}所有测试完成。${NC}"
-
-# cleanup 会由 trap 自动执行
