@@ -7,7 +7,7 @@ set -euo pipefail
 # ============ 配置 ============
 REPO_OWNER="redis"
 REPO_NAME="redis"
-SINCE_DAYS="1"          # 监控最近 N 天的提交
+SINCE_DAYS="3"          # 监控最近 N 天的提交
 MAX_COMMITS="50"        # 最多分析多少个提交
 PROJECT_DIR="/root/.openclaw/workspace/redis-source-analysis"
 SCRIPTS_DIR="${PROJECT_DIR}/scripts"
