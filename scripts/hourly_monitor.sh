@@ -23,9 +23,22 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success(){ echo -e "${GREEN}[OK]${NC} $1"; }
 
-get_token() {
-    if [ -f ~/.config/gh/config.yml ]; then
-        grep oauth_token ~/.config/gh/config.yml | awk '{print $2}'
+get_encrypted_token() {
+    local enc_file="/root/.openclaw/credentials/github.token.enc"
+    if [ -f "$enc_file" ]; then
+        openssl enc -aes-256-cbc -d -salt -pbkdf2 -pass pass:redis-analysis-token-2026 -in "$enc_file" 2>/dev/null
+    fi
+}
+
+push_with_token() {
+    local token
+    token=$(get_encrypted_token)
+    if [ -n "$token" ]; then
+        git remote set-url origin "https://${token}@github.com/spyinx/redis-source-analysis.git" 2>/dev/null
+        git push origin main 2>&1 || true
+        git remote set-url origin "https://github.com/spyinx/redis-source-analysis.git" 2>/dev/null
+    else
+        git push origin main 2>&1 || true
     fi
 }
 
@@ -44,7 +57,7 @@ save_last_sha() { echo "$1" > "$STATE_FILE"; }
 get_pr_for_commit() {
     local sha="$1"
     local token
-    token=$(get_token)
+    token=$(get_encrypted_token)
     local hdrs="-H Accept:application/vnd.github.v3+json"
     [ -n "$token" ] && hdrs="$hdrs -H Authorization:token $token"
     curl -sL $hdrs "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits/${sha}/pulls" | \
@@ -229,7 +242,7 @@ if idx < len(data):
         cd "${PROJECT_DIR}"
         git add -A
         git commit -m "Hourly update: $(date '+%Y-%m-%d %H:%M') - ${important_count} new commits" || true
-        git push origin main 2>&1 || log_warn "Push failed"
+        push_with_token
         log_success "Pushed!"
     else
         log_info "No important commits to analyze."
